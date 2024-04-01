@@ -34,22 +34,26 @@ class ConfundoSocket:
     def connect(self):
         # Send SYN packet
         self._send_packet(flags=SYN)
+        print(f"SEND {self.seq_num} 0 0 {self.cwnd} {self.ssthresh} SYN")
         self.seq_num = (self.seq_num + 1) % MAX_SEQ_NUM
 
         # Wait for SYN-ACK packet
         while True:
             try:
-                _, ack_num, connection_id, flags, _ = self._receive_packet()
+                seq_num, ack_num, connection_id, flags, _ = self._receive_packet()
                 if flags & SYN and flags & ACK:
                     self.ack_num = ack_num
                     self.connection_id = connection_id
+                    print(f"RECV {seq_num} {ack_num} {connection_id} {self.cwnd} {self.ssthresh} SYN ACK")
                     break
             except socket.timeout:
                 # Retransmit SYN packet
                 self._send_packet(flags=SYN)
+                print(f"SEND {self.seq_num} 0 0 {self.cwnd} {self.ssthresh} SYN")
 
         # Send ACK packet
         self._send_packet(flags=ACK)
+        print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} ACK")
         self.connected = True
 
     def send_file(self, filename):
@@ -65,6 +69,7 @@ class ConfundoSocket:
 
                 # Send data
                 self._send_packet(payload=data)
+                print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh}")
                 self.seq_num = (self.seq_num + len(data)) % MAX_SEQ_NUM
 
                 # Wait for ACK
@@ -73,6 +78,7 @@ class ConfundoSocket:
                     try:
                         _, ack_num, _, flags, _ = self._receive_packet()
                         if flags & ACK and ack_num == self.seq_num:
+                            print(f"RECV 0 {ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} ACK")
                             break
                     except socket.timeout:
                         if time.time() - start_time > RETRANSMISSION_TIMEOUT:
@@ -80,6 +86,7 @@ class ConfundoSocket:
                             self.ssthresh = max(self.cwnd // 2, DEFAULT_CWND)
                             self.cwnd = DEFAULT_CWND
                             self._send_packet(payload=data)
+                            print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} RETRANS")
                             start_time = time.time()
 
                 # Update congestion window
@@ -91,6 +98,7 @@ class ConfundoSocket:
     def close(self):
         # Send FIN packet
         self._send_packet(flags=FIN)
+        print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} FIN")
         self.seq_num = (self.seq_num + 1) % MAX_SEQ_NUM
 
         # Wait for ACK
@@ -98,10 +106,12 @@ class ConfundoSocket:
             try:
                 _, ack_num, _, flags, _ = self._receive_packet()
                 if flags & ACK and ack_num == self.seq_num:
+                    print(f"RECV 0 {ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} ACK")
                     break
             except socket.timeout:
                 # Retransmit FIN packet
                 self._send_packet(flags=FIN)
+                print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} FIN")
 
         # Wait for FIN from server
         self.sock.settimeout(FIN_WAIT_TIME)
@@ -111,6 +121,8 @@ class ConfundoSocket:
                 if flags & FIN:
                     # Send ACK for server's FIN
                     self._send_packet(flags=ACK)
+                    print(f"RECV 0 0 {self.connection_id} {self.cwnd} {self.ssthresh} FIN")
+                    print(f"SEND {self.seq_num} {self.ack_num} {self.connection_id} {self.cwnd} {self.ssthresh} ACK")
             except socket.timeout:
                 break
 
@@ -128,4 +140,18 @@ class ConfundoSocket:
         packet, _ = self.sock.recvfrom(DEFAULT_MTU + HEADER_SIZE)
         seq_num, ack_num, connection_id, flags = struct.unpack(HEADER_FORMAT, packet[:HEADER_SIZE])
         payload = packet[HEADER_SIZE:]
-        return seq_num, ack
+        return seq_num, ack_num, connection_id, flags, payload
+
+def main(hostname, port, filename):
+    client_socket = ConfundoSocket(hostname, port)
+    client_socket.connect()
+    client_socket.send_file(filename)
+    client_socket.close()
+
+if __name__ == '__main__':
+    if len(sys.argv) != 4:
+        print("Usage: python3 client.py <HOSTNAME-OR-IP> <PORT> <FILENAME>")
+        sys.exit(1)
+
+    hostname, port, filename = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+    main(hostname, port, filename)
