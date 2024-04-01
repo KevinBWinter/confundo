@@ -38,7 +38,7 @@ class ConfundoSocket:
     def send_file(self, filename):
         with open(filename, 'rb') as file:
             while True:
-                data = file.read(DEFAULT_MTU)
+                data = file.read(DEFAULT_MTU - HEADER_SIZE)
                 if not data:
                     break
 
@@ -85,3 +85,4 @@ if __name__ == '__main__':
 
     hostname, port, filename = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     main(hostname, port, filename)
+
