@@ -32,4 +32,28 @@ class ConfundoSocket:
                 self.ack_num = self.expected_seq_num
                 self._send_packet(client_address, flags=SYN | ACK)
                 self.connected = True
-            elif self.connected and
+            elif self.connected and flags & ACK and seq_num == self.expected_seq_num:
+                self.expected_seq_num = (self.expected_seq_num + len(payload)) % MAX_SEQ_NUM
+                self.ack_num = self.expected_seq_num
+                self._send_packet(client_address, flags=ACK)
+            elif self.connected and flags & FIN:
+                self.connected = False
+                self._send_packet(client_address, flags=ACK)
+                break
+
+    def _send_packet(self, client_address, flags=0):
+        header = struct.pack(HEADER_FORMAT, self.ack_num, 0, self.connection_id, flags)
+        self.sock.sendto(header, client_address)
+
+def main(listen_ip, listen_port, output_filename):
+    server_socket = ConfundoSocket(listen_ip, listen_port)
+    with open(output_filename, 'wb') as output_file:
+        for payload in server_socket.listen():
+            output_file.write(payload)
+
+if __name__ == '__main__':
+    if len(sys.argv) != 4:
+        sys.exit("Usage: python3 server.py <LISTEN-IP> <LISTEN-PORT> <OUTPUT-FILENAME>")
+
+    listen_ip, listen_port, output_filename = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+    main(listen_ip, listen_port, output_filename)
