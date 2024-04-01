@@ -1,4 +1,3 @@
-
 import socket
 import struct
 import sys
@@ -30,7 +29,6 @@ class ConfundoSocket:
         self.cwnd = DEFAULT_CWND
         self.ssthresh = DEFAULT_SSTHRESH
         self.connected = False
-        self.last_ack_time = time.time()
         self.sock.settimeout(MAX_IDLE_TIME)
 
     def connect(self):
@@ -128,4 +126,6 @@ class ConfundoSocket:
     def _receive_packet(self):
         # Receive and parse a packet
         packet, _ = self.sock.recvfrom(DEFAULT_MTU + HEADER_SIZE)
-        seq_num, ack_num, connection_id, flags = struct.unpack(HEADER_FORMAT, packet[:
+        seq_num, ack_num, connection_id, flags = struct.unpack(HEADER_FORMAT, packet[:HEADER_SIZE])
+        payload = packet[HEADER_SIZE:]
+        return seq_num, ack
